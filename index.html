@@ -65,29 +65,37 @@ const fetchBtn = document.getElementById("fetch-btn");
 const report = document.getElementById("report");
 const errorEl = document.getElementById("error");
 
-  function buildApiCandidates(path, params = {}) {
+function buildApiCandidates(path, params = {}) {
   const normalizedPath = path.replace(/^\/+/, "");
   const rawPath = window.location.pathname || "/";
   const directoryPath = rawPath.endsWith("/") ? rawPath : rawPath.replace(/[^/]*$/, "");
 
-  const candidates = [
+  const candidatePaths = [
     `/${normalizedPath}`,
     `${directoryPath}${normalizedPath}`,
   ];
 
+  const candidateOrigins = [window.location.origin];
+  if (["localhost", "127.0.0.1"].includes(window.location.hostname) && window.location.port !== "8000") {
+    candidateOrigins.push("http://127.0.0.1:8000", "http://localhost:8000");
+  }
+
   const urls = [];
   const seen = new Set();
-  candidates.forEach((candidatePath) => {
-    const url = new URL(candidatePath, window.location.origin);
-    Object.entries(params).forEach(([key, value]) => {
-      url.searchParams.set(key, value);
+  candidateOrigins.forEach((origin) => {
+    candidatePaths.forEach((candidatePath) => {
+      const url = new URL(candidatePath, origin);
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.set(key, value);
+      });
+      const href = url.toString();
+      if (!seen.has(href)) {
+        seen.add(href);
+        urls.push(href);
+      }
     });
-    const href = url.toString();
-    if (!seen.has(href)) {
-      seen.add(href);
-      urls.push(href);
-    }
   });
+
   return urls;
 }
  
@@ -132,7 +140,7 @@ async function fetchJsonWithFallback(path, params, fallbackMessage) {
 
   throw new Error(errors[errors.length - 1] || fallbackMessage);
 }
-  
+
 async function loadSuggestions(query = "") {
   const data = await fetchJsonWithFallback(
     "api/symbol-suggestions",
