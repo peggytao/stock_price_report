@@ -65,6 +65,15 @@ const fetchBtn = document.getElementById("fetch-btn");
 const report = document.getElementById("report");
 const errorEl = document.getElementById("error");
 
+function buildApiUrl(path, params = {}) {
+  const apiPath = path.startsWith("/") ? path.slice(1) : path;
+  const url = new URL(apiPath, window.location.href);
+  Object.entries(params).forEach(([key, value]) => {
+    url.searchParams.set(key, value);
+  });
+  return url.toString();
+}
+ 
 async function parseJsonResponse(resp, fallbackMessage) {
   const contentType = resp.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) {
@@ -90,7 +99,7 @@ function hideError() {
 }
 
 async function loadSuggestions(query = "") {
-  const resp = await fetch(`/api/symbol-suggestions?q=${encodeURIComponent(query)}`);
+  const resp = await fetch(buildApiUrl("api/symbol-suggestions", { q: query }));
   const data = await parseJsonResponse(resp, "Unable to load symbol suggestions.");
   symbolList.innerHTML = "";
   data.suggestions.forEach((symbol) => {
@@ -143,7 +152,7 @@ async function fetchReport() {
   fetchBtn.textContent = "Loading...";
 
   try {
-    const resp = await fetch(`/api/report?symbol=${encodeURIComponent(symbol)}`);
+    const resp = await fetch(buildApiUrl("api/report", { symbol }));
     const data = await parseJsonResponse(resp, "Unable to fetch report.");
     if (!resp.ok) {
       throw new Error(data.error || "Unable to fetch report.");
