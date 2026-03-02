@@ -76,8 +76,11 @@ function buildApiCandidates(path, params = {}) {
   ];
 
   const candidateOrigins = [window.location.origin];
-  if (["localhost", "127.0.0.1"].includes(window.location.hostname) && window.location.port !== "8000") {
-    candidateOrigins.push("http://127.0.0.1:8000", "http://localhost:8000");
+  if (window.location.protocol === "http:") {
+    const baseHost = window.location.hostname;
+    if (window.location.port !== "8000") {
+      candidateOrigins.push(`http://${baseHost}:8000`, "http://127.0.0.1:8000", "http://localhost:8000");
+    }
   }
 
   const urls = [];
