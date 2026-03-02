@@ -65,13 +65,30 @@ const fetchBtn = document.getElementById("fetch-btn");
 const report = document.getElementById("report");
 const errorEl = document.getElementById("error");
 
-function buildApiUrl(path, params = {}) {
-  const normalizedPath = `/${path.replace(/^\/+/, "")}`;
-  const url = new URL(normalizedPath, window.location.origin);
-  Object.entries(params).forEach(([key, value]) => {
-    url.searchParams.set(key, value);
+  function buildApiCandidates(path, params = {}) {
+  const normalizedPath = path.replace(/^\/+/, "");
+  const rawPath = window.location.pathname || "/";
+  const directoryPath = rawPath.endsWith("/") ? rawPath : rawPath.replace(/[^/]*$/, "");
+
+  const candidates = [
+    `/${normalizedPath}`,
+    `${directoryPath}${normalizedPath}`,
+  ];
+
+  const urls = [];
+  const seen = new Set();
+  candidates.forEach((candidatePath) => {
+    const url = new URL(candidatePath, window.location.origin);
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.set(key, value);
+    });
+    const href = url.toString();
+    if (!seen.has(href)) {
+      seen.add(href);
+      urls.push(href);
+    }
   });
-  return url.toString();
+  return urls;
 }
  
 async function parseJsonResponse(resp, fallbackMessage) {
@@ -98,9 +115,30 @@ function hideError() {
   errorEl.classList.add("hidden");
 }
 
+async function fetchJsonWithFallback(path, params, fallbackMessage) {
+  const errors = [];
+  for (const url of buildApiCandidates(path, params)) {
+    try {
+      const resp = await fetch(url);
+      const data = await parseJsonResponse(resp, fallbackMessage);
+      if (!resp.ok) {
+        throw new Error(data.error || fallbackMessage);
+      }
+      return data;
+    } catch (err) {
+      errors.push(err.message || String(err));
+    }
+  }
+
+  throw new Error(errors[errors.length - 1] || fallbackMessage);
+}
+  
 async function loadSuggestions(query = "") {
-  const resp = await fetch(buildApiUrl("api/symbol-suggestions", { q: query }));
-  const data = await parseJsonResponse(resp, "Unable to load symbol suggestions.");
+  const data = await fetchJsonWithFallback(
+    "api/symbol-suggestions",
+    { q: query },
+    "Unable to load symbol suggestions.",
+  );
   symbolList.innerHTML = "";
   data.suggestions.forEach((symbol) => {
     const option = document.createElement("option");
@@ -152,11 +190,11 @@ async function fetchReport() {
   fetchBtn.textContent = "Loading...";
 
   try {
-    const resp = await fetch(buildApiUrl("api/report", { symbol }));
-    const data = await parseJsonResponse(resp, "Unable to fetch report.");
-    if (!resp.ok) {
-      throw new Error(data.error || "Unable to fetch report.");
-    }
+    const data = await fetchJsonWithFallback(
+      "api/report",
+      { symbol },
+      "Unable to fetch report.",
+    );
     renderReport(data);
     await loadSuggestions(symbol);
   } catch (err) {
