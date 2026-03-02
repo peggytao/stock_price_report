@@ -126,9 +126,11 @@ function hideError() {
   errorEl.classList.add("hidden");
 }
 
-async function fetchJsonWithFallback(path, params, fallbackMessage) {
+async function fetchJsonWithFallback(paths, params, fallbackMessage) {
+  const pathList = Array.isArray(paths) ? paths : [paths];
   const errors = [];
-  for (const url of buildApiCandidates(path, params)) {
+  for (const path of pathList) {
+    for (const url of buildApiCandidates(path, params)) {
     try {
       const resp = await fetch(url);
       const data = await parseJsonResponse(resp, fallbackMessage);
@@ -139,6 +141,7 @@ async function fetchJsonWithFallback(path, params, fallbackMessage) {
     } catch (err) {
       errors.push(err.message || String(err));
     }
+    }
   }
 
   throw new Error(errors[errors.length - 1] || fallbackMessage);
@@ -146,7 +149,7 @@ async function fetchJsonWithFallback(path, params, fallbackMessage) {
 
 async function loadSuggestions(query = "") {
   const data = await fetchJsonWithFallback(
-    "api/symbol-suggestions",
+    ["api/symbol-suggestions", "symbol-suggestions"],
     { q: query },
     "Unable to load symbol suggestions.",
   );
@@ -202,7 +205,7 @@ async function fetchReport() {
 
   try {
     const data = await fetchJsonWithFallback(
-      "api/report",
+      ["api/report", "report"],
       { symbol },
       "Unable to fetch report.",
     );
