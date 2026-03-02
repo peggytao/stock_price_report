@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Insights Dashboard</title>
+<style>
+body { font-family: Arial, sans-serif; background:#f4f6f9; margin:20px; }
+.card { background:white; padding:25px; border-radius:12px; margin-bottom:20px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); }
+h1, h2 { margin:0 0 12px 0; }
+.metric { margin-bottom:10px; }
+.form-row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+input, button { font-size:16px; padding:10px 12px; border-radius:8px; border:1px solid #d0d7e2; }
+button { cursor:pointer; background:#1b5cff; color:white; border:none; }
+button:hover { background:#194fdc; }
+.recommendation { font-size:28px; font-weight:bold; padding:10px; border-radius:8px; text-align:center; margin-top:15px; }
+.buy { background-color: #e6f9ec; color: #0a8a34; }
+.hold { background-color: #fff7e6; color: #b7791f; }
+.sell { background-color: #fde8e8; color: #c53030; }
+.analysis-text { margin-top:10px; line-height:1.6; }
+.error { color:#c53030; margin-top:10px; }
+.footer { font-size:12px; color:#666; text-align:center; margin-top:30px; }
+.hidden { display:none; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>Stock Insights Dashboard</h1>
+  <p>Enter a stock symbol to get price, key stats, latest news, and analyst recommendation.</p>
+  <div class="form-row">
+    <label for="symbol"><strong>Stock Symbol</strong></label>
+    <input id="symbol" name="symbol" list="symbol-list" value="NVDA" placeholder="e.g. NVDA, AAPL" autocomplete="off" />
+    <datalist id="symbol-list"></datalist>
+    <button id="fetch-btn">Get Report</button>
+  </div>
+  <p id="error" class="error hidden"></p>
+</div>
+<div id="report" class="hidden">
+  <div class="card">
+    <h2><span id="report-symbol">NVDA</span> Report</h2>
+    <p><strong>Date:</strong> <span id="report-date">-</span></p>
+    <div class="metric"><strong>Price:</strong> <span id="price">-</span></div>
+    <div class="metric"><strong>PE Ratio:</strong> <span id="pe-ratio">-</span></div>
+    <div class="metric"><strong>EPS:</strong> <span id="eps">-</span></div>
+    <div class="metric"><strong>Market Cap:</strong> <span id="market-cap">-</span></div>
+    <div id="recommendation" class="recommendation hold">HOLD</div>
+    <p id="reason">Analyst sentiment is mixed.</p>
+  </div>
+
+  <div class="card">
+    <h2>Latest News</h2>
+    <ul id="headlines" class="analysis-text"></ul>
+  </div>
+</div>
+
+<div class="footer">
+Disclaimer: This report is automatically generated for educational purposes only and does not constitute financial advice.
+</div>
+
+<script>
+const symbolInput = document.getElementById("symbol");
+const symbolList = document.getElementById("symbol-list");
+const fetchBtn = document.getElementById("fetch-btn");
+const report = document.getElementById("report");
+const errorEl = document.getElementById("error");
+
+function showError(message) {
+  errorEl.textContent = message;
+  errorEl.classList.remove("hidden");
+}
+
+function hideError() {
+  errorEl.classList.add("hidden");
+}
+
+async function loadSuggestions(query = "") {
+  const resp = await fetch(`/api/symbol-suggestions?q=${encodeURIComponent(query)}`);
+  const data = await resp.json();
+  symbolList.innerHTML = "";
+  data.suggestions.forEach((symbol) => {
+    const option = document.createElement("option");
+    option.value = symbol;
+    symbolList.appendChild(option);
+  });
+}
+
+function renderReport(data) {
+  const { snapshot, headlines } = data;
+  document.getElementById("report-symbol").textContent = snapshot.symbol;
+  document.getElementById("report-date").textContent = snapshot.date;
+  document.getElementById("price").textContent = snapshot.price;
+  document.getElementById("pe-ratio").textContent = snapshot.pe_ratio;
+  document.getElementById("eps").textContent = snapshot.eps;
+  document.getElementById("market-cap").textContent = snapshot.market_cap;
+
+  const recEl = document.getElementById("recommendation");
+  recEl.textContent = snapshot.recommendation;
+  recEl.className = `recommendation ${snapshot.rec_class}`;
+  document.getElementById("reason").textContent = snapshot.reason;
+
+  const listEl = document.getElementById("headlines");
+  listEl.innerHTML = "";
+  if (!headlines.length) {
+    const li = document.createElement("li");
+    li.textContent = "No headlines available right now.";
+    listEl.appendChild(li);
+  } else {
+    headlines.forEach((headline) => {
+      const li = document.createElement("li");
+      li.textContent = headline;
+      listEl.appendChild(li);
+    });
+  }
+
+  report.classList.remove("hidden");
+}
+
+async function fetchReport() {
+  const symbol = symbolInput.value.trim();
+  if (!symbol) {
+    showError("Please enter a stock symbol.");
+    return;
+  }
+
+  hideError();
+  fetchBtn.disabled = true;
+  fetchBtn.textContent = "Loading...";
+
+  try {
+    const resp = await fetch(`/api/report?symbol=${encodeURIComponent(symbol)}`);
+    const data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.error || "Unable to fetch report.");
+    }
+    renderReport(data);
+    await loadSuggestions(symbol);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    fetchBtn.disabled = false;
+    fetchBtn.textContent = "Get Report";
+  }
+}
+
+symbolInput.addEventListener("input", (event) => {
+  loadSuggestions(event.target.value).catch(() => {});
+});
+
+fetchBtn.addEventListener("click", fetchReport);
+symbolInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    fetchReport();
+  }
+});
+
+loadSuggestions().catch(() => {});
+fetchReport();
+</script>
+
+</body>
+</html>
