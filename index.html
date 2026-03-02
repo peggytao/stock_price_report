@@ -66,8 +66,8 @@ const report = document.getElementById("report");
 const errorEl = document.getElementById("error");
 
 function buildApiUrl(path, params = {}) {
-  const apiPath = path.startsWith("/") ? path : `/${path}`;
-  const url = new URL(apiPath, window.location.origin);
+  const apiPath = path.replace(/^\/+/, "");
+  const url = new URL(apiPath, window.location.href);
   Object.entries(params).forEach(([key, value]) => {
     url.searchParams.set(key, value);
   });
