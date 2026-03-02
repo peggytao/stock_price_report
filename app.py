@@ -17,6 +17,18 @@ POPULAR_SYMBOLS = [
     "NFLX", "JPM", "BAC", "INTC", "ORCL", "CRM", "UBER", "PLTR",
 ]
 
+OFFLINE_SNAPSHOTS: dict[str, dict[str, Any]] = {
+    "AAPL": {"price": 215.12, "pe_ratio": 33.1, "eps": 6.5, "market_cap": 3_290_000_000_000, "recommendation": "BUY", "rec_class": "buy"},
+    "MSFT": {"price": 420.35, "pe_ratio": 36.4, "eps": 11.55, "market_cap": 3_120_000_000_000, "recommendation": "BUY", "rec_class": "buy"},
+    "NVDA": {"price": 126.48, "pe_ratio": 61.8, "eps": 2.05, "market_cap": 3_110_000_000_000, "recommendation": "BUY", "rec_class": "buy"},
+    "AMZN": {"price": 185.73, "pe_ratio": 53.2, "eps": 3.49, "market_cap": 1_950_000_000_000, "recommendation": "BUY", "rec_class": "buy"},
+}
+
+OFFLINE_HEADLINES = [
+    "Live market headlines are currently unavailable in offline mode.",
+    "Quote data shown may be delayed and should not be used for trading decisions.",
+    "Reconnect network access to retrieve the latest company-specific headlines.",
+]
 
 def normalize_symbol(raw_symbol: str) -> str:
     return raw_symbol.strip().upper()
@@ -67,6 +79,13 @@ def get_expert_recommendation(symbol: str) -> tuple[str, str, str]:
 
 
 def get_stock_snapshot(symbol: str) -> dict[str, str]:
+    try:
+        return _get_stock_snapshot_from_api(symbol)
+    except Exception as exc:
+        return get_offline_snapshot(symbol, exc)
+
+
+def _get_stock_snapshot_from_api(symbol: str) -> dict[str, str]:
     quote_url = f"https://query1.finance.yahoo.com/v7/finance/quote?{urlencode({'symbols': symbol})}"
     data = fetch_json(quote_url)
     result = data.get("quoteResponse", {}).get("result") or []
@@ -88,18 +107,46 @@ def get_stock_snapshot(symbol: str) -> dict[str, str]:
         "date": datetime.now().strftime("%Y-%m-%d"),
     }
 
+def get_offline_snapshot(symbol: str, error: Exception) -> dict[str, str]:
+    base = OFFLINE_SNAPSHOTS.get(symbol, {
+        "price": None,
+        "pe_ratio": "N/A",
+        "eps": "N/A",
+        "market_cap": "N/A",
+        "recommendation": "HOLD",
+        "rec_class": "hold",
+    })
+    return {
+        "symbol": symbol,
+        "price": f"${float(base['price']):.2f}" if base.get("price") else "N/A",
+        "pe_ratio": str(base.get("pe_ratio", "N/A")),
+        "eps": str(base.get("eps", "N/A")),
+        "market_cap": format_number(base.get("market_cap", "N/A")),
+        "recommendation": str(base.get("recommendation", "HOLD")),
+        "rec_class": str(base.get("rec_class", "hold")),
+        "reason": (
+            "Live provider is unreachable, so this report is using an offline fallback dataset "
+            f"({type(error).__name__})."
+        ),
+        "date": datetime.now().strftime("%Y-%m-%d"),
+    }
+
 
 def get_headlines(symbol: str) -> list[str]:
-    rss_url = f"https://finance.yahoo.com/rss/headline?s={quote(symbol)}"
-    request = Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(request, timeout=20) as response:
-        xml_data = response.read()
+    try:
+        rss_url = f"https://finance.yahoo.com/rss/headline?s={quote(symbol)}"
+        request = Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request, timeout=20) as response:
+            xml_data = response.read()
 
-    root = ET.fromstring(xml_data)
-    titles: list[str] = []
-    for item in root.findall(".//item/title")[:5]:
-        titles.append(item.text or "")
-    return titles
+        root = ET.fromstring(xml_data)
+        titles: list[str] = []
+        for item in root.findall(".//item/title")[:5]:
+            titles.append(item.text or "")
+        return titles
+    except Exception:
+        return OFFLINE_HEADLINES
+    
 
 
 class AppHandler(BaseHTTPRequestHandler):
@@ -138,16 +185,8 @@ class AppHandler(BaseHTTPRequestHandler):
             if not symbol:
                 self._send_json({"error": "A stock symbol is required."}, 400)
                 return
-            try:
-                snapshot = get_stock_snapshot(symbol)
-            except Exception as exc:
-                self._send_json({"error": f"Stock data fetch failed for {symbol}: {exc}"}, 502)
-                return
-
-            try:
-                headlines = get_headlines(symbol)
-            except Exception:
-                headlines = []
+            snapshot = get_stock_snapshot(symbol)
+            headlines = get_headlines(symbol)
 
             self._send_json({
                 "snapshot": snapshot,
