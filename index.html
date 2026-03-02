@@ -65,6 +65,21 @@ const fetchBtn = document.getElementById("fetch-btn");
 const report = document.getElementById("report");
 const errorEl = document.getElementById("error");
 
+async function parseJsonResponse(resp, fallbackMessage) {
+  const contentType = resp.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    const body = await resp.text();
+    const preview = body.slice(0, 120).replace(/\s+/g, " ").trim();
+    throw new Error(`${fallbackMessage} Received non-JSON response${preview ? `: ${preview}` : "."}`);
+  }
+
+  try {
+    return await resp.json();
+  } catch {
+    throw new Error(`${fallbackMessage} Invalid JSON payload returned by server.`);
+  }
+}
+  
 function showError(message) {
   errorEl.textContent = message;
   errorEl.classList.remove("hidden");
@@ -76,7 +91,7 @@ function hideError() {
 
 async function loadSuggestions(query = "") {
   const resp = await fetch(`/api/symbol-suggestions?q=${encodeURIComponent(query)}`);
-  const data = await resp.json();
+  const data = await parseJsonResponse(resp, "Unable to load symbol suggestions.");
   symbolList.innerHTML = "";
   data.suggestions.forEach((symbol) => {
     const option = document.createElement("option");
@@ -129,7 +144,7 @@ async function fetchReport() {
 
   try {
     const resp = await fetch(`/api/report?symbol=${encodeURIComponent(symbol)}`);
-    const data = await resp.json();
+    const data = await parseJsonResponse(resp, "Unable to fetch report.");
     if (!resp.ok) {
       throw new Error(data.error || "Unable to fetch report.");
     }
